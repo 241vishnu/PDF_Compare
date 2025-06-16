@@ -1,0 +1,1574 @@
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Document Comparator</title>
+	<script src="libs/pdf.min.js"></script>
+	<script>
+		// Check if pdfjsLib is loaded (it should be after the script above)
+		if (window.pdfjsLib) {
+			window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js';
+		} else {
+			console.error("PDF.js library (pdfjsLib) was not found on the window object. PDF processing might fail.");
+		}
+	</script>
+	<script src="libs/mammoth.browser.min.js"></script>
+	<script src="libs/diff_match_patch.js"></script>
+	<script src="libs/tesseract.min.js"></script>
+
+	<style>
+		 {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			min-height: 100vh;
+			padding: 20px;
+			color: #333;
+		}
+
+		.container {
+			max-width: 1400px;
+			margin: 0 auto;
+			background: rgba(255, 255, 255, 0.98); /* Slightly more opaque */
+			border-radius: 20px;
+			backdrop-filter: blur(8px); /* Slightly reduced blur for performance if needed */
+			box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15); /* Slightly more pronounced shadow */
+			padding: 20px;
+		}
+
+		.header {
+			text-align: center;
+			margin-bottom: 40px;
+		}
+		.header h1 {
+			font-size: 2.5rem; /* Responsive font size */
+			font-weight: 700;
+			background: linear-gradient(45deg, #5e70e0, #6c3a91); /* Adjusted gradient */
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+			margin-bottom: 0.5rem;
+		}
+		.header p {
+			font-size: 1.1rem;
+			color: #555;
+		}
+
+
+		.upload-section {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 30px;
+			margin-bottom: 30px;
+		}
+
+		.upload-box {
+			border: 2px dashed #8a98f0; /* Softer dash */
+			border-radius: 15px;
+			padding: 30px 20px; /* Adjusted padding */
+			text-align: center;
+			background: #f7f8fc; /* Light background */
+			transition: all 0.3s ease;
+			cursor: pointer;
+			position: relative;
+			overflow: hidden;
+		}
+
+		.upload-box:hover {
+			border-color: #764ba2;
+			background: #eff1f7;
+			transform: translateY(-5px);
+			box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+		}
+
+		.upload-icon {
+			font-size: 40px; /* Adjusted size */
+			color: #667eea;
+			margin-bottom: 15px;
+		}
+
+		.upload-text {
+			font-size: 1.1rem; /* Adjusted size */
+			font-weight: 600;
+			color: #333;
+			margin-bottom: 8px;
+		}
+
+		.upload-subtext {
+			color: #666;
+			font-size: 0.85rem; /* Adjusted size */
+		}
+
+		.file-input {
+			display: none;
+		}
+
+		.file-info {
+			background: #ffffff; /* White background for info */
+			border-radius: 10px;
+			padding: 12px 15px; /* Adjusted padding */
+			margin-top: 15px;
+			border-left: 4px solid #667eea;
+			text-align: left; /* Align text to left */
+			font-size: 0.9rem;
+			box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+		}
+		.file-info strong {
+			color: #444;
+		}
+		.file-info small {
+			color: #777;
+			display: block; /* Make small take full width */
+			margin-top: 4px;
+		}
+
+
+		.search-section {
+			background: #f7f8fc;
+			border-radius: 15px;
+			padding: 25px;
+			margin-bottom: 30px;
+			box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+		}
+		.search-section h3 {
+			text-align: center;
+			margin-bottom: 20px;
+			color: #444;
+			font-weight: 600;
+		}
+
+		.search-container {
+			display: flex;
+			gap: 15px;
+			align-items: center;
+			flex-wrap: wrap;
+		}
+
+		.search-input {
+			flex: 1;
+			min-width: 250px; /* Adjusted min-width */
+			padding: 12px 20px;
+			border: 1px solid #d1d5db; /* Softer border */
+			border-radius: 25px;
+			font-size: 1rem;
+			outline: none;
+			transition: all 0.3s ease;
+		}
+
+		.search-input:focus {
+			border-color: #667eea;
+			box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2); /* Softer focus shadow */
+		}
+
+		.btn {
+			padding: 12px 25px;
+			border: none;
+			border-radius: 25px;
+			font-size: 1rem; /* Adjusted size */
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			position: relative;
+			left:-200px;
+			overflow: hidden;
+			box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Subtle shadow */
+		}
+		.btn:active {
+			transform: translateY(1px);
+			box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+		}
+
+
+		.btn-primary {
+			background: linear-gradient(45deg, #667eea, #764ba2);
+			color: white;
+		}
+
+		.btn-primary:hover {
+			background: linear-gradient(45deg, #5a6fd0, #6a4090); /* Darker on hover */
+			box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+		}
+
+		.btn-secondary {
+			background: linear-gradient(45deg, #1abc9c, #16a085); /* Teal gradient */
+			color: white;
+		}
+
+		.btn-secondary:hover {
+			background: linear-gradient(45deg, #17a78a, #138d75); /* Darker teal */
+			box-shadow: 0 6px 12px rgba(26, 188, 156, 0.3);
+		}
+
+		.btn:disabled {
+			opacity: 0.5; /* More visible disabled state */
+			cursor: not-allowed;
+			box-shadow: none !important;
+			transform: none !important;
+		}
+
+		.status-section {
+			background: #f7f8fc;
+			border-radius: 15px;
+			padding: 20px;
+			margin-bottom: 30px;
+			text-align: center;
+			box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+		}
+
+		.status-text {
+			font-size: 1.1rem; /* Adjusted size */
+			font-weight: 600;
+			color: #333;
+			margin-bottom: 15px;
+		}
+
+		.progress-bar {
+			width: 100%;
+			height: 10px; /* Thicker bar */
+			background: #e1e5e9;
+			border-radius: 5px; /* Rounded bar */
+			overflow: hidden;
+		}
+
+		.progress-fill {
+			height: 100%;
+			background: linear-gradient(45deg, #667eea, #764ba2);
+			width: 0%;
+			transition: width 0.5s ease; /* Smoother transition */
+			border-radius: 5px;
+		}
+
+		.results-container {
+			display: grid;
+			grid-template-columns: 1fr; /* Default to single column */
+			gap: 30px;
+		}
+
+		.result-section {
+		
+			background: white;
+			border-radius: 15px;
+			padding: 25px;
+			box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08); /* Softer shadow */
+			border-left: 5px solid #667eea;
+		}
+
+		.result-title {
+			font-size: 1.5rem; /* Adjusted size */
+			font-weight: 700;
+			color: #333;
+			margin-bottom: 20px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.result-content {
+			max-height: 500px; /* Increased max height */
+			overflow-y: auto;
+			border: 1px solid #e1e5e9;
+			border-radius: 10px;
+			padding: 20px; /* Increased padding */
+			background: #fdfdff; /* Slightly off-white */
+		}
+		/* Custom scrollbar for result content */
+		.result-content::-webkit-scrollbar {
+			width: 8px;
+		}
+		.result-content::-webkit-scrollbar-track {
+			background: #f1f1f1;
+			border-radius: 10px;
+		}
+		.result-content::-webkit-scrollbar-thumb {
+			background: #c1c1c1;
+			border-radius: 10px;
+		}
+		.result-content::-webkit-scrollbar-thumb:hover {
+			background: #a1a1a1;
+		}
+
+
+		.search-results {
+			background: white;
+			border-radius: 10px;
+			padding: 20px;
+			margin-top: 15px;
+			border-left: 4px solid #1abc9c; /* Teal accent */
+			box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+		}
+
+		.search-result-item {
+			background: #f8f9fa;
+			padding: 12px 15px;
+			margin: 10px 0;
+			border-radius: 8px;
+			border-left: 3px solid #667eea;
+			font-size: 0.95rem;
+		}
+		.search-result-item strong {
+			color: #555;
+		}
+		.search-result-item div[style*="margin-top: 5px;"] { /* Target context div */
+			font-family: monospace;
+			background-color: #e9ecef;
+			padding: 8px;
+			border-radius: 4px;
+			word-break: break-all;
+		}
+
+
+		.highlight {
+			background: #fff3cd; /* Softer yellow */
+			padding: 1px 3px; /* Adjusted padding */
+			border-radius: 3px;
+			font-weight: bold;
+			color: #856404; /* Darker text for yellow bg */
+		}
+
+		.comparison-canvas {
+			border: 1px solid #ccc; /* Softer border */
+			border-radius: 10px;
+			max-width: 100%;
+			margin: 15px auto; /* Centered canvas */
+			display: block; /* For centering */
+			background-color: #fff; /* Ensure canvas has background if content is transparent */
+		}
+
+		.difference-highlight-summary { /* Renamed for clarity */
+			background: rgba(255, 235, 238, 0.7); /* Lighter red for summary */
+			border: 1px solid #f5c6cb; /* Softer border */
+			border-radius: 8px;
+			margin: 15px 0;
+			padding: 15px;
+			font-size: 0.95rem;
+		}
+		.difference-highlight-summary strong {
+			color: #721c24; /* Dark red for text */
+		}
+
+
+		.metadata-diff-item { /* Renamed for clarity */
+			background: rgba(255, 243, 205, 0.7); /* Lighter orange for summary */
+			border-left: 4px solid #ffc107; /* Amber color */
+			padding: 12px 15px;
+			margin: 10px 0;
+			border-radius: 5px;
+			font-size: 0.95rem;
+		}
+		.metadata-diff-item strong {
+			color: #856404; /* Dark amber/brown for text */
+		}
+		.metadata-diff-item .comparison-grid {
+			 display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;
+		}
+		.metadata-diff-item .comparison-grid > div {
+			background-color: rgba(255,255,255,0.5); padding: 8px; border-radius: 4px;
+		}
+
+
+		.loading {
+			display: none; /* Initially hidden, shown by JS */
+			text-align: center;
+			padding: 30px 20px; /* More padding */
+			color: #555;
+		}
+		.loading p {
+			margin-top: 10px;
+			font-size: 1rem;
+		}
+
+		.spinner {
+			border: 4px solid #e0e0e0; /* Lighter grey */
+			border-top: 4px solid #667eea; /* Main accent color */
+			border-radius: 50%;
+			width: 36px; /* Slightly smaller */
+			height: 36px;
+			animation: spin 0.8s linear infinite; /* Faster spin */
+			margin: 0 auto 10px; /* Adjusted margin */
+		}
+
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
+		.no-results {
+			text-align: center;
+			color: #666;
+			font-style: italic;
+			padding: 20px;
+			background-color: #f8f9fa;
+			border-radius: 8px;
+		}
+
+		/* Styles for text diff output */
+	   
+	.addition {
+	  background-color: #d4edda; /* green for added */
+	  color: #155724;
+	  padding: 1px 2px;
+	  border-radius: 2px;
+	}
+
+	.deletion {
+	  background-color: #f8d7da; /* red for missing */
+	  color: #721c24;
+	  padding: 1px 2px;
+	  border-radius: 2px;
+	}
+
+
+		@media (max-width: 768px) {
+			.upload-section {
+				grid-template-columns: 1fr;
+			}
+			.header h1 { font-size: 2rem; }
+			.header p { font-size: 1rem; }
+			.result-title { font-size: 1.3rem; }
+			
+			.search-container {
+				flex-direction: column;
+				align-items: stretch;
+			}
+			
+			.search-input {
+				min-width: auto;
+			}
+			.btn {
+				width: 100%; /* Full width buttons on mobile */
+				margin-top: 10px;
+			}
+			.search-container .btn { /* Except for search button if next to input */
+				 width: auto; margin-top: 0;
+			}
+			.upload-box { padding: 25px 15px; }
+		}
+		
+	   .upload-box.dragover { background-color: #e0e7ff;
+	                 border-color: #5a67d8;
+	}
+
+	.indent {
+	 	 display: inline-block;
+	 	 width: 1.5em;
+	}
+	
+	.text-diff-box{
+	flex: 1;
+	border: 2px dashed #764ba2;
+	background-color: #f0f0ff;
+	padding: 15px;
+	border-radius: 10px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+	overflow-y: auto;
+	max-height: 400px;
+	text-align: justify;
+	}
+	.page-Range{
+			background: linear-gradient(45deg, #667eea, #764ba2);
+			color: white;
+			padding: 12px 25px;
+			border: none;
+			border-radius: 25px;
+			font-size: 1rem; /* Adjusted size */
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			position: relative;
+			left:600px;
+			bottom:45px;
+			overflow: hidden;
+			width:25%;
+			
+	}
+	
+	</style>
+	</head>
+	<body>
+	<div class="container">
+		<div class="header">
+			<h1>Document Comparator</h1>
+			<p>Upload, Search, and Compare Documents with Advanced Analysis</p>
+		</div>
+
+		<div class="upload-section">
+			<div class="upload-box" id="baselineUploadTrigger">
+				<div class="upload-icon">📁</div>
+				<div class="upload-text">Upload Baseline Document</div>
+				<div class="upload-subtext">Supports PDF, DOC, DOCX, TXT</div>
+				<input type="file" id="baselineFile" class="file-input" accept=".pdf,.doc,.docx,.txt">
+				<div id="baselineInfo" class="file-info" style="display: none;"></div>
+			</div>
+
+			<div class="upload-box" id="targetUploadTrigger">
+				<div class="upload-icon">📁</div>
+				<div class="upload-text">Upload Target Document</div>
+				<div class="upload-subtext">Supports PDF, DOC, DOCX, TXT</div>
+				<input type="file" id="targetFile" class="file-input" accept=".pdf,.doc,.docx,.txt">
+				<div id="targetInfo" class="file-info" style="display: none;"></div>
+			</div>
+		</div>
+
+		<div class="search-section">
+			<h3>🔍 Search in Target Document</h3>
+			<div class="search-container">
+				<input type="text" id="searchInput" class="search-input" placeholder="Enter text to search...">
+				<button class="btn btn-secondary" id="searchBtn" disabled>Search</button>
+			</div>
+			<div id="searchResults" style="margin-top:15px;"></div> </div>
+
+		<div style="text-align: center; margin-bottom: 30px;">
+			<button class="btn btn-primary" id="compareBtn" disabled>
+				🔄 Start Comprehensive Comparison
+			</button>
+			<div class="page-Range">
+  <label for="pageRange">Select Page Range:</label>
+  <select id="pageRange">
+    <option value="1-25">Pages 1–25</option>
+    <option value="26-50">Pages 26–50</option>
+    <option value="51-75">Pages 51–75</option>
+    <option value="76-100">Pages 76–100</option>
+    <option value="101-9999">Pages 101+</option>
+  </select>
+</div>
+		</div>
+
+		<div class="status-section" id="statusSection" style="display: none;">
+			<div class="status-text" id="statusText">Ready to compare...</div>
+			<div class="progress-bar">
+				<div class="progress-fill" id="progressFill"></div>
+			</div>
+		</div>
+
+		<div class="results-container" id="resultsContainer" style="display: none;">
+			<div class="result-section">
+				<div class="result-title">
+					🖼️ Visual Preview Comparison
+				</div>
+				<div class="result-content" id="imageResults">
+					<div class="loading" id="imageLoading">
+						<div class="spinner"></div>
+						<p>Analyzing visual differences...</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="result-section">
+				<div class="result-title">
+					📝 Text Content Comparison
+				</div>
+				<div class="result-content" id="textResults">
+					<div class="loading" id="textLoading">
+						<div class="spinner"></div>
+						<p>Comparing text content...</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="result-section">
+				<div class="result-title">
+					⚙️ Document Properties Comparison
+				</div>
+		
+		<div style="margin-top: 20px; padding: 15px; background: #f7f8fc; border-radius: 10px; border: 1px solid #ccc;">
+	 		 <input type="text" id="searchString" placeholder="Enter string to search" style="padding: 8px; width: 60%;">
+	 		 <button onclick="searchFontProperties()" class="btn btn-secondary">Search String Properties</button>
+		</div>
+
+		<div id="propertySearchResults" style="margin-top: 15px;"></div>
+				<div class="result-content" id="metadataResults">
+					<div class="loading" id="metadataLoading">
+						<div class="spinner"></div>
+						<p>Analyzing document properties...</p>
+					</div>
+				</div>
+			</div>
+
+		</div>
+		
+		<div id="reportButtonContainer" style="text-align: center; margin-top: 20px; display: none;">
+  			<button class="btn btn-primary" onclick="openReportTab()">📝 View Full Report</button>
+			<button class="btn btn-primary" onclick="downloadReport()" style="margin-left: 10px;">📥 Download Report</button>
+
+		</div>
+
+	</div>
+
+	<script>
+		// Global state variables
+		let baselineDoc = null;
+		let targetDoc = null;
+		let baselineData = null; // Stores { text, pages, metadata, imageData }
+		let targetData = null;   // Stores { text, pages, metadata, imageData }
+		
+let imageSimilarityPercent = null;
+let textMatchPercent = null;
+let textDiffPercent = null;
+let visualComparisonCanvas = null;
+
+
+		// DOM Element References
+		const baselineFileInput = document.getElementById('baselineFile');
+		const targetFileInput = document.getElementById('targetFile');
+		const baselineInfoDiv = document.getElementById('baselineInfo');
+		const targetInfoDiv = document.getElementById('targetInfo');
+		const searchInput = document.getElementById('searchInput');
+		const searchBtn = document.getElementById('searchBtn');
+		const searchResultsDiv = document.getElementById('searchResults');
+		const compareBtn = document.getElementById('compareBtn');
+		const statusSection = document.getElementById('statusSection');
+		const statusText = document.getElementById('statusText');
+		const progressFill = document.getElementById('progressFill');
+		const resultsContainer = document.getElementById('resultsContainer');
+		const imageResultsDiv = document.getElementById('imageResults');
+		const textResultsDiv = document.getElementById('textResults');
+		const metadataResultsDiv = document.getElementById('metadataResults');
+		// Note: The specific loading indicator divs (imageLoading, textLoading, metadataLoading)
+		// are dynamically created and replaced. We will reference them by ID when needed,
+		// or ensure their parent containers are properly managed.
+
+
+		// Event Listeners Setup
+		document.getElementById('baselineUploadTrigger').addEventListener('click', () => baselineFileInput.click());
+		document.getElementById('targetUploadTrigger').addEventListener('click', () => targetFileInput.click());
+
+		baselineFileInput.addEventListener('change', (event) => handleFileUpload(event.target, 'baseline'));
+		targetFileInput.addEventListener('change', (event) => handleFileUpload(event.target, 'target'));
+		searchBtn.addEventListener('click', searchInDocument);
+		compareBtn.addEventListener('click', startComparison);
+
+
+		// --- Core File Handling and Data Extraction ---
+		async function handleFileUpload(inputElement, type) {
+			const file = inputElement.files[0];
+			const infoDiv = type === 'baseline' ? baselineInfoDiv : targetInfoDiv;
+
+			// Reset relevant state if a new file is uploaded
+			if (type === 'baseline') {
+				baselineDoc = null;
+				baselineData = null;
+			} else {
+				targetDoc = null;
+				targetData = null;
+			}
+			// Clear previous file info and hide results if files are changed
+			infoDiv.style.display = 'none';
+			infoDiv.innerHTML = '';
+			resultsContainer.style.display = 'none';
+			statusSection.style.display = 'none';
+			searchResultsDiv.innerHTML = ''; // Clear search results too
+
+
+			if (!file) {
+				updateButtonStates(); // Update buttons even if no file is selected (e.g., user cancels)
+				return;
+			}
+
+			infoDiv.style.display = 'block';
+			infoDiv.innerHTML = `
+				<strong>📄 ${escapeHtml(file.name)}</strong><br>
+				<small>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB | Type: ${escapeHtml(file.type) || 'Unknown'}</small>
+				<div class="loading" style="display:block; text-align:left; padding: 5px 0 0 0;"><div class="spinner" style="width:16px; height:16px; border-width:2px; margin: 0 5px 0 0; display:inline-block; vertical-align:middle;"></div><small>Processing...</small></div>`;
+
+			try {
+				const extractedData = await extractDocumentData(file);
+				if (type === 'baseline') {
+					baselineDoc = file;
+					baselineData = extractedData;
+				} else {
+					targetDoc = file;
+					targetData = extractedData;
+				}
+				// Update infoDiv after successful processing
+				infoDiv.innerHTML = `
+					<strong>📄 ${escapeHtml(file.name)}</strong><br>
+					<small>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB | Type: ${escapeHtml(file.type) || 'Unknown'}</small><br>
+					<small style="color:green;">✅ Ready</small>`;
+			} catch (error) {
+				console.error('Error processing file:', error);
+				infoDiv.innerHTML = `
+					<strong>📄 ${escapeHtml(file.name)}</strong><br>
+					<small>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB | Type: ${escapeHtml(file.type) || 'Unknown'}</small><br>
+					<span style="color: red;">⚠️ Error processing file: ${escapeHtml(error.message)}</span>`;
+			}
+			updateButtonStates();
+		}
+
+
+	 function setupDragAndDrop(uploadBoxId, fileInputId, type) {
+	    		const uploadBox = document.getElementById(uploadBoxId);
+	    		const fileInput = document.getElementById(fileInputId);
+
+	    		uploadBox.addEventListener('dragover', (e) => { e.preventDefault(); uploadBox.classList.add('dragover'); });
+
+	    			uploadBox.addEventListener('dragleave', () => {
+	        			uploadBox.classList.remove('dragover');
+	    						});
+
+	    			uploadBox.addEventListener('drop', (e) => {
+	       				 e.preventDefault();
+	        		uploadBox.classList.remove('dragover');
+	        		const files = e.dataTransfer.files;
+	        		if (files.length > 0) {
+	         			   fileInput.files = files;
+	          		  const event = new Event('change');
+	          		  fileInput.dispatchEvent(event);
+	        						}
+	    });
+	}
+
+	document.addEventListener('DOMContentLoaded', () => {
+	    setupDragAndDrop('baselineUploadTrigger', 'baselineFile', 'baseline');
+	    setupDragAndDrop('targetUploadTrigger', 'targetFile', 'target');
+	});
+
+
+		async function extractDocumentData(file) {
+			const fileType = file.name.split('.').pop().toLowerCase();
+			const fileName = file.name;
+
+			if (fileType === 'pdf' && (typeof window.pdfjsLib === 'undefined' || !window.pdfjsLib.getDocument)) {
+				console.error("PDF.js library (window.pdfjsLib) is not available when trying to extract PDF data.");
+				throw new Error("PDF processing library not loaded. Cannot process PDF files.");
+			}
+			if ((fileType === 'doc' || fileType === 'docx') && typeof mammoth === 'undefined') {
+				console.error("Mammoth.js library is not available.");
+				throw new Error("Word document processing library not loaded.");
+			}
+
+			switch (fileType) {
+				case 'pdf':
+					return await extractPDFData(file);
+				case 'doc': 
+				case 'docx':
+					return await extractDocxData(file);
+				case 'txt':
+					return await extractTextData(file);
+				default:
+					console.warn(`Unsupported file type: ${fileType} for file ${fileName}`);
+					throw new Error(`Unsupported file type: .${fileType}`);
+			}
+		}
+
+		async function extractPDFData(file) {
+			const arrayBuffer = await file.arrayBuffer();
+			const pdf = await window.pdfjsLib.getDocument({data: arrayBuffer}).promise;
+			
+			let fullText = '';
+			const pagesData = []; 
+			
+			
+			const { start, end } = getSelectedPageRange();
+			for (let i = start; i <= Math.min(end, pdf.numPages); i++) {
+
+				const page = await pdf.getPage(i);
+				//const textContent = await page.getTextContent();
+				let pageText = '';
+				let textItems = [];
+				try {
+					const textContent = await page.getTextContent();
+					if (textContent.items.length === 0) {
+						// Fallback to OCR
+						pageText = await extractTextWithOCR(page);
+					}
+					else {
+						textItems = textContent.items.map(item => {
+						pageText += item.str + (item.hasEOL ? '\n' : ' ');
+						return {
+							text: item.str,
+							fontName: page.commonObjs._objs[item.fontName]?.data?.fontFamily || item.fontName,
+  							fontSize: Math.round(item.height),
+  							color: item.color || 'unknown', // optional
+  							bold: item.fontName?.toLowerCase().includes('bold') || false,
+  							italic: item.fontName?.toLowerCase().includes('italic') || false,
+  							x: Math.round(item.transform[4]),
+  							y: Math.round(item.transform[5]),
+  							width: Math.round(item.width),
+  							height: Math.round(item.height)
+     			  		 };
+    				   });
+  			   		  }
+					}
+				catch (err) {
+ 			 		console.warn('Text extraction failed, using OCR fallback:', err);
+ 			 		pageText = await extractTextWithOCR(page);
+				}	
+
+				const viewport = page.getViewport({ scale: 1.0 }); 
+				
+				/*let pageText = '';
+				const textItems = textContent.items.map(item => {
+					pageText += item.str + (item.hasEOL ? '\n' : ' ');
+					return {
+						text: item.str, fontName: item.fontName,
+						fontSize: Math.round(item.height), 
+						bold: item.fontName?.toLowerCase().includes('bold') || false,
+						italic: item.fontName?.toLowerCase().includes('italic') || false,
+						x: Math.round(item.transform[4]), y: Math.round(item.transform[5]),
+						width: Math.round(item.width), height: Math.round(item.height)
+					};
+				});*/
+				
+				pagesData.push({
+					pageNumber: i, text: pageText.trim(), textItems: textItems,
+					width: viewport.width, height: viewport.height
+				});
+				fullText += pageText.trim() + '\n'; 
+			}
+
+			
+const imageDataList = [];
+
+for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 0.5 });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    imageDataList.push(canvas.toDataURL('image/png'));
+}
+
+			
+			const allTextItems = pagesData.flatMap(p => p.textItems);
+			const avgFontSize = allTextItems.length > 0 ? 
+								Math.round(allTextItems.reduce((sum, t) => sum + (t.fontSize || 0), 0) / allTextItems.length) : 12;
+			const metadata = await pdf.getMetadata();
+
+			return {
+				text: fullText.trim(), pages: pagesData,
+				metadata: {
+					pageCount: pdf.numPages,
+					fonts: [...new Set(allTextItems.map(t => t.fontName).filter(Boolean))],
+					avgFontSize: avgFontSize,
+					producer: metadata.info?.Producer,
+					creator: metadata.info?.Creator,
+					title: metadata.info?.Title,
+					author: metadata.info?.Author,
+				},
+				imageDataList: imageDataList
+			};
+		}
+		
+async function extractTextWithOCR(page) {
+  const viewport = page.getViewport({ scale: 2.0 });
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const dataUrl = canvas.toDataURL('image/png');
+
+  const result = await Tesseract.recognize(dataUrl, 'eng', {
+    logger: m => console.log(m) // Optional: logs progress
+  });
+
+  return result.data.text;
+}
+
+
+		async function extractDocxData(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const text = result.value || "";
+
+    const lines = text.split('\n');
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+
+    const linesPerPage = 30; // simulate 30 lines per page
+    const pages = [];
+    const imageDataList = [];
+
+    for (let i = 0; i < lines.length; i += linesPerPage) {
+        const pageLines = lines.slice(i, i + linesPerPage);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasWidth = 400, canvasHeight = 500;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        ctx.fillStyle = 'black';
+        ctx.font = '12px Arial';
+        const lineHeight = 16;
+        const padding = 10;
+
+        pageLines.forEach((line, idx) => {
+            ctx.fillText(line.substring(0, 60), padding, padding + (idx + 1) * lineHeight);
+        });
+
+        imageDataList.push(canvas.toDataURL('image/png'));
+        pages.push({
+            pageNumber: pages.length + 1,
+            text: pageLines.join('\n'),
+            textItems: [],
+            width: canvasWidth,
+            height: canvasHeight
+        });
+    }
+
+    return {
+        text: text,
+        pages: pages,
+        metadata: {
+            pageCount: pages.length,
+            lineCount: lines.length,
+            wordCount: words.length,
+            estimatedFontSize: 12,
+            fonts: ["Default (DOCX)"]
+        },
+        imageDataList: imageDataList
+    };
+}
+
+		async function extractTextData(file) {
+			const text = await file.text();
+			const lines = text.split('\n');
+			const words = text.split(/\s+/).filter(w => w.length > 0);
+
+			const canvas = document.createElement('canvas');
+			const ctx = canvas.getContext('2d');
+			const canvasWidth = 400; const canvasHeight = 500;
+			canvas.width = canvasWidth; canvas.height = canvasHeight;
+			
+			ctx.fillStyle = 'white'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+			ctx.fillStyle = 'black'; ctx.font = '10px monospace';
+			const lineHeight = 12; const padding = 10;
+
+			for (let i = 0; i < lines.length && (padding + (i + 1) * lineHeight) < canvasHeight - padding; i++) {
+				ctx.fillText(lines[i].substring(0, 60), padding, padding + (i + 1) * lineHeight);
+			}
+
+			return {
+				text: text,
+				pages: [{ pageNumber: 1, text: text, textItems: [], width: canvasWidth, height: canvasHeight }],
+				metadata: {
+					pageCount: 1, lineCount: lines.length, wordCount: words.length,
+					encoding: 'UTF-8 (assumed for .txt)', estimatedFontSize: 12, 
+					fonts: ["Default (TXT)"] 
+				},
+				imageData: canvas.toDataURL('image/png')
+			};
+		}
+
+		function updateButtonStates() {
+			searchBtn.disabled = !targetData; 
+			compareBtn.disabled = !(baselineData && targetData); 
+		}
+
+
+		// --- Search Functionality ---
+		function searchInDocument() { 
+			const searchTerm = searchInput.value.trim();
+			searchResultsDiv.innerHTML = ''; 
+
+			if (!targetData || !targetData.text) {
+				searchResultsDiv.innerHTML = '<p class="no-results">Please upload and process a target document first.</p>';
+				return;
+			}
+			if (!searchTerm) {
+				searchResultsDiv.innerHTML = '<p class="no-results">Please enter a search term.</p>';
+				return;
+			}
+
+			searchResultsDiv.innerHTML = `<div class="loading" style="display:block; text-align:left;"><div class="spinner" style="width:16px; height:16px; border-width:2px; margin: 0 5px 0 0; display:inline-block; vertical-align:middle;"></div><small>Searching...</small></div>`;
+
+			setTimeout(() => {
+				const text = targetData.text; 
+				const lowerCaseText = text.toLowerCase();
+				const lowerCaseSearchTerm = searchTerm.toLowerCase();
+				const matches = [];
+				let currentIndex = 0;
+
+				while ((currentIndex = lowerCaseText.indexOf(lowerCaseSearchTerm, currentIndex)) !== -1) {
+					const startContext = Math.max(0, currentIndex - 30);
+					const endContext = Math.min(text.length, currentIndex + lowerCaseSearchTerm.length + 30);
+					const context = text.substring(startContext, endContext);
+					
+					const highlightedContext = context.replace(
+						new RegExp(escapeRegex(searchTerm), 'gi'), 
+						match => `<span class="highlight">${escapeHtml(match)}</span>`
+					);
+					
+					matches.push({
+						index: currentIndex, context: highlightedContext,
+						line: text.substring(0, currentIndex).split('\n').length 
+					});
+					
+					currentIndex += lowerCaseSearchTerm.length; 
+				}
+
+				let resultsHTML = '<div class="search-results">'; 
+				if (matches.length > 0) {
+					resultsHTML += `<h4>✅ Found ${matches.length} occurrence(s) for "${escapeHtml(searchTerm)}"</h4>`;
+					matches.forEach((match, i) => {
+						resultsHTML += `
+							<div class="search-result-item">
+								<strong>Match ${i + 1}</strong> (Approx. Line ${match.line})<br>
+								<div style="margin-top: 5px;">...${match.context}...</div>
+							</div>
+						`;
+					});
+				} else {
+					resultsHTML += `<div class="no-results">❌ No matches found for "${escapeHtml(searchTerm)}"</div>`;
+				}
+				resultsHTML += '</div>';
+				searchResultsDiv.innerHTML = resultsHTML;
+			}, 50); 
+		}
+
+
+		// --- Comparison Logic ---
+		async function startComparison() {
+			if (!baselineData || !targetData) {
+				alert("Please ensure both baseline and target documents are uploaded and processed.");
+				return;
+			}
+
+			statusText.textContent = 'Initializing comparison...';
+			progressFill.style.width = '0%';
+			progressFill.style.background = 'linear-gradient(45deg, #667eea, #764ba2)'; 
+			
+			imageResultsDiv.innerHTML = `<div class="loading" id="imageLoadingActive" style="display: block;"><div class="spinner"></div><p>Analyzing visual preview differences...</p></div>`;
+			textResultsDiv.innerHTML = `<div class="loading" id="textLoadingActive" style="display: block;"><div class="spinner"></div><p>Comparing text content...</p></div>`;
+		await performTextComparison();
+			metadataResultsDiv.innerHTML = `<div class="loading" id="metadataLoadingActive" style="display: block;"><div class="spinner"></div><p>Analyzing document properties...</p></div>`;
+			
+			// Make sure the specific loading divs are visible by their new IDs
+			// This is implicitly handled by setting innerHTML above, but explicit calls are fine too.
+			// document.getElementById('imageLoadingActive').style.display = 'block';
+			// document.getElementById('textLoadingActive').style.display = 'block';
+			// document.getElementById('metadataLoadingActive').style.display = 'block';
+
+			statusSection.style.display = 'block';
+			resultsContainer.style.display = 'grid'; 
+
+			compareBtn.disabled = true;
+
+			try {
+				statusText.textContent = 'Comparison Started...';
+				progressFill.style.width = '10%';
+				await new Promise(resolve => setTimeout(resolve, 200)); 
+
+				statusText.textContent = 'Comparing Visual Previews...';
+				progressFill.style.width = '30%';
+				await performImageComparison(); 
+				// Loading is replaced by content in performImageComparison via displayImageComparisonResults
+
+				statusText.textContent = 'Comparing Text Content...';
+				progressFill.style.width = '60%';
+				await performTextComparison();
+				// Loading is replaced by content in performTextComparison
+
+				statusText.textContent = 'Comparing Document Properties...';
+				progressFill.style.width = '90%';
+				await performMetadataComparison();
+				// Loading is replaced by content in performMetadataComparison
+
+				statusText.textContent = 'Comparison Completed Successfully!';
+				progressFill.style.width = '100%';
+
+			} catch (error) {
+				console.error("Error during comparison:", error);
+				statusText.textContent = 'Error during comparison. Check console.';
+				progressFill.style.width = '100%'; 
+				progressFill.style.background = 'red'; 
+			} finally {
+				updateButtonStates(); 
+				document.getElementById('reportButtonContainer').style.display = 'block';
+
+			}
+		}
+		
+		async function performImageComparison() {
+    const baselineImages = baselineData.imageDataList;
+    const targetImages = targetData.imageDataList;
+
+    if (!baselineImages || !targetImages || baselineImages.length === 0 || targetImages.length === 0) {
+        imageResultsDiv.innerHTML = "<p class='no-results'>Visual preview data is missing for one or both documents.</p>";
+        return;
+    }
+
+    imageResultsDiv.innerHTML = ''; // Clear previous content
+
+    const totalPages = Math.min(baselineImages.length, targetImages.length);
+
+    
+	const { start, end } = getSelectedPageRange();
+	for (let i = start - 1; i < Math.min(end, totalPages); i++) {
+        const baselineImg = new Image();
+        const targetImg = new Image();
+        const baselineSrc = baselineImages[i];
+        const targetSrc = targetImages[i];
+
+        await Promise.all([
+            new Promise((res, rej) => { baselineImg.onload = res; baselineImg.onerror = rej; baselineImg.src = baselineSrc; }),
+            new Promise((res, rej) => { targetImg.onload = res; targetImg.onerror = rej; targetImg.src = targetSrc; })
+        ]);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const imgWidth = 400, imgHeight = 500;
+        canvas.width = 2 * imgWidth + 20;
+        canvas.height = imgHeight + 50;
+        canvas.className = 'comparison-canvas';
+
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(baselineImg, 0, 25, imgWidth, imgHeight);
+        ctx.drawImage(targetImg, imgWidth + 20, 25, imgWidth, imgHeight);
+
+        ctx.fillStyle = 'black';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText(`Baseline Page ${i + 1}`, 10, 18);
+        ctx.fillText(`Target Page ${i + 1}`, imgWidth + 30, 18);
+
+        const tempCanvas1 = document.createElement('canvas');
+        const tempCanvas2 = document.createElement('canvas');
+        tempCanvas1.width = imgWidth; tempCanvas1.height = imgHeight;
+        tempCanvas2.width = imgWidth; tempCanvas2.height = imgHeight;
+        const ctx1 = tempCanvas1.getContext('2d');
+        const ctx2 = tempCanvas2.getContext('2d');
+        ctx1.drawImage(baselineImg, 0, 0, imgWidth, imgHeight);
+        ctx2.drawImage(targetImg, 0, 0, imgWidth, imgHeight);
+
+        const differences = compareImagePixelData(ctx1, ctx2, imgWidth, imgHeight);
+
+        differences.forEach(diff => {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+            ctx.fillRect(diff.x, diff.y + 25, diff.width, diff.height);
+            ctx.strokeRect(diff.x, diff.y + 25, diff.width, diff.height);
+
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+            ctx.fillRect(diff.x + imgWidth + 20, diff.y + 25, diff.width, diff.height);
+            ctx.strokeRect(diff.x + imgWidth + 20, diff.y + 25, diff.width, diff.height);
+        });
+
+        const summary = document.createElement('div');
+        summary.innerHTML = `<p><strong>Page ${i + 1}:</strong> ${differences.length} difference region(s) detected.</p>`;
+        summary.style.marginBottom = '10px';
+
+        imageResultsDiv.appendChild(summary);
+        imageResultsDiv.appendChild(canvas);
+    }
+}
+
+		function compareImagePixelData(baselineCtx, targetCtx, width, height) {
+			const differences = [];
+			const threshold = 30;     
+			const blockSize = 15;     
+			const diffPercentage = 0.02; 
+			
+			const baselineImageData = baselineCtx.getImageData(0, 0, width, height).data;
+			const targetImageData = targetCtx.getImageData(0, 0, width, height).data;
+			
+			for (let y = 0; y < height; y += blockSize) {
+				for (let x = 0; x < width; x += blockSize) {
+					let diffCount = 0;
+					let currentBlockWidth = Math.min(blockSize, width - x);
+					let currentBlockHeight = Math.min(blockSize, height - y);
+					let totalPixelsInBlock = currentBlockWidth * currentBlockHeight;
+					
+					for (let by = 0; by < currentBlockHeight; by++) {
+						for (let bx = 0; bx < currentBlockWidth; bx++) {
+							const pixelIndex = ((y + by) * width + (x + bx)) * 4;
+							
+							const rDiff = Math.abs(baselineImageData[pixelIndex] - targetImageData[pixelIndex]);
+							const gDiff = Math.abs(baselineImageData[pixelIndex + 1] - targetImageData[pixelIndex + 1]);
+							const bDiff = Math.abs(baselineImageData[pixelIndex + 2] - targetImageData[pixelIndex + 2]);
+							
+							if (rDiff > threshold || gDiff > threshold || bDiff > threshold) {
+								diffCount++;
+							}
+						}
+					}
+					
+					if (totalPixelsInBlock > 0 && diffCount > totalPixelsInBlock * diffPercentage) { 
+						differences.push({
+							x: x, y: y, width: currentBlockWidth, height: currentBlockHeight,
+							intensity: Math.min(100, (diffCount / totalPixelsInBlock) * 100)
+						});
+					}
+				}
+			}
+			return differences;
+		}
+		
+		function displayImageComparisonResults(canvasElement, differences) {
+		
+
+
+			let summaryHTML = `
+				<div style="margin-bottom: 10px; padding:10px; background-color: #eef; border-radius: 5px;">
+					<small><strong>Note:</strong> This "Visual Preview Comparison" analyzes simplified visual previews generated primarily from the document's text content. Differences reflect variations in these generated previews, not necessarily a pixel-perfect comparison of original embedded images or complex document layouts.</small>
+				</div>
+				<div style="display: flex; justify-content: space-between; align-items: center; background: #f0f4f8; padding: 15px; border-radius: 10px; margin-bottom:15px;">
+					<div>
+						<strong>Visual Preview Analysis:</strong><br>
+						<span style="font-size: 1.1rem; font-weight: bold; color: ${differences.length > 0 ? '#dc3545' : '#198754'};">
+							${differences.length} difference region(s) detected in previews.
+						</span>
+					</div>
+					<div style="text-align: right; font-size: 1.5rem;">
+						${differences.length === 0 ? '✅' : '⚠️'}
+					</div>
+				</div>
+			`;
+			
+			/*summaryHTML += canvasElement.outerHTML; 
+
+			if (differences.length > 0) {
+				summaryHTML += `
+					<div class="difference-highlight-summary" style="margin-top: 20px;">
+						<strong>Key Difference Regions Highlighted:</strong>
+						<p>The highlighted areas on the previews indicate regions where the generated visual content differs. This could be due to text changes, layout shifts in the preview, or different rendering of content.</p>
+						<ul>`;
+				differences.slice(0, 5).forEach((diff, i) => {
+					summaryHTML += `<li>Region ${i+1}: Approx. at (x:${diff.x}, y:${diff.y}) with intensity ${diff.intensity.toFixed(0)}%</li>`;
+				});
+				if(differences.length > 5) summaryHTML += `<li>... and ${differences.length - 5} more regions.</li>`;
+				summaryHTML += `</ul></div>`;
+			} else {
+				summaryHTML += `
+					<div style="background: #d1e7dd; border: 1px solid #a3cfbb; color: #0a3622; border-radius: 10px; padding: 20px; margin-top: 20px; text-align: center;">
+						<h4 style="margin: 0 0 10px 0;">✅ Visual Previews Match!</h4>
+						<p style="margin: 0;">No significant visual differences detected between the generated previews of the documents.</p>
+					</div>
+				`;
+			}*/
+		   
+		
+visualComparisonCanvas = canvasElement; // Save for report
+
+const totalBlocks = Math.floor((canvasElement.width / 15) * (canvasElement.height / 15));
+const diffBlocks = differences.length;
+imageSimilarityPercent = totalBlocks > 0 ? Math.max(0, 100 - (diffBlocks / totalBlocks) * 100).toFixed(2) : 'N/A';
+
+imageResultsDiv.innerHTML = summaryHTML;
+imageResultsDiv.appendChild(canvasElement);
+
+
+		}
+
+
+		async function performTextComparison() {
+		
+
+  if (!baselineData?.text || !targetData?.text) {
+    textResultsDiv.innerHTML = "<p class='no-results'>Text data is missing for one or both documents.</p>";
+    return;
+  }
+
+  const dmp = new diff_match_patch();
+  const diffs = dmp.diff_main(baselineData.text, targetData.text);
+  dmp.diff_cleanupSemantic(diffs);
+
+  let diffHTML = diffs.map(([op, data]) => {
+    const escaped = escapeHtml(data);
+    if (op === 0) return `<span>${escaped}</span>`;
+    if (op === -1) return `<span class="deletion" style ="background-color: #f8d7da; /* red for missing */ color: #721c24; padding: 1px 2px; border-radius: 2px;">${escaped}</span>`;
+    if (op === 1) return `<span class="addition" style="background-color: #d4edda; /* green for added */ color: #155724; padding: 1px 2px; border-radius: 2px;">${escaped}</span>`;
+  }).join('');
+
+let equalChars = 0, totalChars = 0;
+diffs.forEach(([op, data]) => {
+    totalChars += data.length;
+    if (op === 0) equalChars += data.length;
+});
+textMatchPercent = totalChars > 0 ? ((equalChars / totalChars) * 100).toFixed(2) : 'N/A';
+textDiffPercent = totalChars > 0 ? (100 - (equalChars / totalChars) * 100).toFixed(2) : 'N/A';
+
+const summaryHTML = `
+	  
+	  <div class="text-diff-container" style = " display: flex; flex-direction: row; /* horizontal layout */ gap: 20px; margin-bottom: 20px;">
+	    <div class="text-diff-box"> 
+	      <h5>Baseline Document</h5>
+	      ${escapeHtml(baselineData.text)}
+	    </div>
+	    <div class="text-diff-box">
+	      <h5>Target Document</h5>
+	      ${escapeHtml(targetData.text)}
+	    </div>
+	    <div class="text-diff-box">
+	      <h5>Differences
+	      <p><strong style="color:#dc3545;">Red:</strong> Missing in Target</p>
+	      <p><strong style="color:#198754;">Green:</strong> Extra in Target</p></h5>
+	      ${diffHTML}
+	    </div>
+	  </div>
+	  <div class="stats">
+          <strong>Text Match:</strong> ${textMatchPercent || 'N/A'}%<br>
+          <strong>Text Difference:</strong> ${textDiffPercent || 'N/A'}%
+      </div>
+	`;
+
+
+
+textResultsDiv.innerHTML = summaryHTML;
+
+
+	}
+
+				   
+
+		async function performMetadataComparison() {
+			if (!baselineData || !baselineData.metadata || !targetData || !targetData.metadata) {
+				metadataResultsDiv.innerHTML = "<p class='no-results'>Metadata is missing for one or both documents.</p>";
+				return;
+			}
+			const baselineMeta = baselineData.metadata;
+			const targetMeta = targetData.metadata;
+			
+			let resultsHTML = '<div style="font-size:0.95rem;">';
+			
+			const comparisons = [
+				{ label: 'Page/Structure Count', bVal: baselineMeta.pageCount || baselineMeta.lineCount, tVal: targetMeta.pageCount || targetMeta.lineCount, unit: baselineMeta.pageCount ? 'pages' : 'lines' }
+
+			];
+
+			comparisons.forEach(comp => {
+				const bDisplayVal = comp.bVal === undefined || comp.bVal === null ? 'N/A' : String(comp.bVal);
+				const tDisplayVal = comp.tVal === undefined || comp.tVal === null ? 'N/A' : String(comp.tVal);
+				const isDifferent = bDisplayVal.trim().toLowerCase() !== tDisplayVal.trim().toLowerCase(); // Case-insensitive comparison
+				
+				const itemClass = 'metadata-diff-item'; 
+				const diffIndicator = isDifferent && bDisplayVal !== 'N/A' && tDisplayVal !== 'N/A' ? // Only show diff if both have comparable values
+					'<span style="color: #fd7e14; font-size: 0.8em;">⚠️ Difference</span>' : 
+					'<span style="color: #198754; font-size: 0.8em;">✅ Match / N/A</span>';
+
+				resultsHTML += `
+					<div class="${itemClass}">
+						<strong>${comp.label}:</strong> ${diffIndicator}
+						<div class="comparison-grid">
+							<div><small>Baseline:</small> ${escapeHtml(bDisplayVal)} ${comp.unit}</div>
+							<div><small>Target:</small> ${escapeHtml(tDisplayVal)} ${comp.unit}</div>
+						</div>
+					</div>
+				`;
+			});
+			resultsHTML += '</div>';
+			metadataResultsDiv.innerHTML = resultsHTML;
+			
+			
+const baselineFonts = new Set(baselineData.pages.flatMap(p => p.textItems.map(t => t.fontName)));
+const targetFonts = new Set(targetData.pages.flatMap(p => p.textItems.map(t => t.fontName)));
+
+const fontDiffs = [...new Set([...baselineFonts, ...targetFonts])].map(font => {
+  const inBaseline = baselineFonts.has(font);
+  const inTarget = targetFonts.has(font);
+  return {
+    font,
+    status: inBaseline && inTarget ? '✅ Both' : inBaseline ? '⬅️ Baseline Only' : '➡️ Target Only'
+  };
+});
+
+let fontHTML = '<div class="metadata-diff-item"><strong>Font Usage Differences:</strong><ul>';
+fontDiffs.forEach(f => {
+  fontHTML += `<li>${f.status}: <code>${escapeHtml(f.font)}</code></li>`;
+});
+fontHTML += '</ul></div>';
+
+metadataResultsDiv.innerHTML += fontHTML;
+
+		}
+
+	function searchFontProperties() {
+    const searchTerm = document.getElementById('searchString').value.trim().toLowerCase();
+    const resultsDiv = document.getElementById('propertySearchResults');
+    resultsDiv.innerHTML = '';
+
+    if (!searchTerm) {
+        resultsDiv.innerHTML = '<p>Please enter a string to search.</p>';
+        return;
+    }
+
+    function findMatches(data, label) {
+        if (!data || !data.pages) return `<p>❌ ${label} document not loaded.</p>`;
+
+        for (const page of data.pages) {
+            const items = page.textItems || [];
+            const combinedText = items.map(i => i.text).join(' ').toLowerCase();
+            const index = combinedText.indexOf(searchTerm);
+
+            if (index !== -1) {
+                // Try to find the first matching item
+                let runningText = '';
+                for (let i = 0; i < items.length; i++) {
+                    runningText += items[i].text + ' ';
+                    if (runningText.toLowerCase().includes(searchTerm)) {
+                        const item = items[i];
+                        return `
+                            <p><strong>✅ Found in ${label} Document</strong> (Page ${page.pageNumber})</p>
+                            <ul>
+                                <li><strong>Font Size:</strong> ${item.fontSize || 'Unknown'}</li>
+                                <li><strong>Font Family:</strong> ${item.fontName || 'Unknown'}</li>
+                                <li><strong>Font Color:</strong> ${item.color || 'Unknown'}</li>
+                                <li><strong>Bold:</strong> ${item.bold ? 'Yes' : 'No'}</li>
+                                <li><strong>Italic:</strong> ${item.italic ? 'Yes' : 'No'}</li>
+                            </ul>
+                        `;
+                    }
+                }
+            }
+        }
+        return `<p>❌ Not found in ${label} Document</p>`;
+    }
+
+    const baselineResult = findMatches(baselineData, 'Baseline');
+    const targetResult = findMatches(targetData, 'Target');
+
+    resultsDiv.innerHTML = baselineResult + targetResult;
+}
+function openReportTab() {
+    const reportWindow = window.open('', '_blank');
+    //const canvasHTML = visualComparisonCanvas ? visualComparisonCanvas.outerHTML : '<p>No canvas available.</p>';
+
+    const reportHTML = `
+        <html>
+        <head>
+            <title>Document Comparison Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+                h2 { color: #333; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+                .section { margin-bottom: 30px; }
+                .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                .stats { margin-top: 10px; font-size: 0.95rem; color: #555; }
+            </style>
+        </head>
+        <body>
+            <h1>📄 Document Comparison Report</h1>
+
+            <div class="section">
+                <h2>📝 Text Comparison</h2>
+                <div class="box" style = "text-align:justify;">
+                    ${textResultsDiv.innerHTML}
+                   
+                </div>
+            </div>
+
+        </body>
+        </html>
+    `;
+    reportWindow.document.write(reportHTML);
+    reportWindow.document.close();
+}
+
+function downloadReport() {
+    const reportHTML = `
+        <html>
+        <head>
+            <title>Document Comparison Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+                h2 { color: #333; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+                .section { margin-bottom: 30px; }
+                .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                .stats { margin-top: 10px; font-size: 0.95rem; color: #555; }
+            </style>
+        </head>
+        <body>
+            <h1>📄 Document Comparison Report</h1>
+            <div class="section">
+                <h2>📝 Text Comparison</h2>
+                <div class="box" style = "text-align:justify;">
+                    ${document.getElementById('textResults').innerHTML}
+                </div>
+            </div>
+           
+        </body>
+        </html>
+    `;
+
+    const blob = new Blob([reportHTML], { type: "text/html" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "comparison_report.html";
+    link.click();
+}
+
+
+		// --- Utility Functions ---
+		function escapeHtml(unsafe) {
+			if (typeof unsafe !== 'string') return '';
+			return unsafe
+				 .replace(/&/g, "&amp;")
+				 .replace(/</g, "&lt;")
+				 .replace(/>/g, "&gt;")
+				 .replace(/"/g, "&quot;")
+				 .replace(/'/g, "&#039;");
+		}
+		function escapeRegex(string) {
+			return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		}
+
+	function replaceNbspWithIndentation(text) {
+	  		return text.replace(/(&nbsp;){2,}/g, match => {
+	    		const indentLevel = Math.floor(match.length / 6); // approx. 6 characters per &nbsp;
+	    		return `<span class="indent" style="margin-left: ${indentLevel * 1.5}em;"></span>`;
+	  		});
+	}
+
+
+		// Initialize button states on page load
+		updateButtonStates();
+		
+
+document.addEventListener("DOMContentLoaded", function () {
+  const aboutBtn = document.getElementById('aboutButton');
+  const aboutPanel = document.getElementById('aboutPanel');
+
+  if (aboutBtn && aboutPanel) {
+    aboutBtn.addEventListener('click', () => {
+      aboutPanel.style.display = aboutPanel.style.display === 'block' ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!aboutBtn.contains(e.target) && !aboutPanel.contains(e.target)) {
+        aboutPanel.style.display = 'none';
+      }
+    });
+
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    fileInputs.forEach(input => {
+      input.addEventListener('change', () => {
+        aboutBtn.style.display = 'none';
+        aboutPanel.style.display = 'none';
+      });
+    });
+  }
+});
+
+function getSelectedPageRange() {
+  const range = document.getElementById("pageRange").value;
+  const [start, end] = range.split("-").map(Number);
+  return { start, end };
+}
+
+
+
+	</script>
+	
+
+<div id="aboutButton" class="about-button" style="position: fixed;top: 20px;left: 20px;background: #667eea;color: white;padding: 10px 15px;border-radius: 8px;cursor: pointer;z-index: 1000;font-weight: bold;box-shadow: 0 4px 8px rgba(0,0,0,0.2);">ℹ️ About</div>
+<div id="aboutPanel" class="about-panel" style="position: fixed;top: 60px;left: 20px;width: 400px;background: white;border: 1px solid #ccc;border-radius: 10px;padding: 15px;box-shadow: 0 8px 16px rgba(0,0,0,0.2);display: none;z-index: 1000;">
+  <h3 style ="margin-top: 0;color: #333;">ABOUT</h3>
+  <p style="margin-bottom:0px">This tool allows users to upload, analyze, and compare documents (PDF, DOC, DOCX, TXT) for visual, textual, and metadata differences.</p>
+  <p style="margin-top:0px">Ideal for legal, editorial, and academic use cases.</p>
+  <hr>
+  <div><strong>Author:</strong> Vishnu Vardhan</div>
+  <div><strong>Email:</strong> <a href="mailto:VishnuvardhanReddy.Kampati@cognizant.com" style="color: #667eea;text-decoration: none;">VishnuvardhanReddy.Kampati@cognizant.com</a></div>
+</div>
+
+	</body>
+	</html>
